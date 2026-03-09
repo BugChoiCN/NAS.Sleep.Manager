@@ -1,0 +1,7 @@
+{
+    "defaults": {
+        "run-as": "package"
+    },
+    "username": "nas_sleep_manager",
+    "groupname": "nas_sleep_manager"
+}

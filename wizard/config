@@ -1,0 +1,50 @@
+[
+    {
+        "stepTitle": "NAS休眠管理配置",
+        "items": [
+            {
+                "type": "tips",
+                "helpText": "配置NAS智能休眠管理的基本参数。这些设置将影响系统何时进入休眠状态。"
+            },
+            {
+                "type": "switch",
+                "field": "enable_service",
+                "label": "启用自动休眠功能",
+                "initValue": "true"
+            },
+            {
+                "type": "text",
+                "field": "inactivity_timeout",
+                "label": "空闲休眠时间（分钟）",
+                "initValue": "30",
+                "placeholder": "默认30分钟，建议范围5-240"
+            },
+            {
+                "type": "text",
+                "field": "check_interval",
+                "label": "检查间隔（秒）",
+                "initValue": "60",
+                "placeholder": "默认60秒，建议范围10-300"
+            },
+            {
+                "type": "text",
+                "field": "max_connections",
+                "label": "最大允许连接数",
+                "initValue": "5",
+                "placeholder": "默认5，建议范围0-50"
+            },
+            {
+                "type": "switch",
+                "field": "enable_wake_on_lan",
+                "label": "启用网络唤醒（WOL）",
+                "initValue": "true"
+            },
+            {
+                "type": "switch",
+                "field": "verbose_logging",
+                "label": "启用详细日志记录",
+                "initValue": "true"
+            }
+        ]
+    }
+]

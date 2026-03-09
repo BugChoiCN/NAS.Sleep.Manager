@@ -1,0 +1,17 @@
+#!/bin/bash
+# 安装初始化脚本
+
+echo "安装NAS智能休眠管理应用..."
+echo "应用目录: $TRIM_APPDEST"
+echo "数据目录: $TRIM_PKGVAR"
+echo "配置目录: $TRIM_PKGETC"
+
+# 确保必要的目录存在
+mkdir -p "$TRIM_PKGVAR"
+mkdir -p "$TRIM_PKGETC"
+
+# 设置权限
+chmod 755 "$TRIM_APPDEST/cmd/main"
+
+echo "安装完成"
+exit 0

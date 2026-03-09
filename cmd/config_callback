@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# 配置回调脚本
+echo "处理用户配置变更..."
+
+CONFIG_FILE="$TRIM_PKGETC/nas-suspend.conf"
+
+# 更新配置文件
+cat > "$CONFIG_FILE" << EOF
+# ============================================
+# NAS自动休眠配置文件
+# 更新时间: $(date '+%Y-%m-%d %H:%M:%S')
+# ============================================
+
+# ---------- 基础设置 ----------
+# 空闲多长时间后休眠（秒）
+INACTIVITY_TIMEOUT=$((${wizard_inactivity_timeout:-30} * 60))
+
+# 检查间隔（秒）
+CHECK_INTERVAL=${wizard_check_interval:-60}
+
+# 日志文件路径
+LOG_FILE="$TRIM_PKGVAR/nas-suspend.log"
+
+# ---------- 连接检测设置 ----------
+# 允许的最大活跃连接数
+MAX_ALLOWED_CONNECTIONS=${wizard_max_connections:-5}
+
+# ---------- 网络检测设置 ----------
+# 网络流量变化阈值（字节）
+MIN_NETWORK_CHANGE=1048576
+
+# ---------- 调试设置 ----------
+# 启用详细日志
+VERBOSE_LOG=${wizard_verbose_logging:-true}
+
+# ---------- 网络唤醒设置 ----------
+# 启用网络唤醒
+ENABLE_WAKE_ON_LAN=${wizard_enable_wake_on_lan:-true}
+EOF
+
+# 根据是否启用来控制服务
+if [ "${wizard_enable_service:-true}" = "true" ]; then
+    echo "启用休眠服务..."
+    "$TRIM_APPDEST/cmd/main" start
+else
+    echo "禁用休眠服务..."
+    "$TRIM_APPDEST/cmd/main" stop
+fi
+
+echo "配置更新完成"
+exit 0

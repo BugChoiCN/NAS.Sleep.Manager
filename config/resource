@@ -1,0 +1,28 @@
+{
+    "data-share":
+    {
+        "shares":
+        [
+            {
+                "name": "NAS.AUTO.SUSPEND",
+                "permission":
+                {
+                    "rw":
+                    [
+                        "NAS.AUTO.SUSPEND"
+                    ]
+                }
+            },
+            {
+                "name": "NAS.AUTO.SUSPEND/data",
+                "permission":
+                {
+                    "rw":
+                    [
+                        "NAS.AUTO.SUSPEND"
+                    ]
+                }
+            }
+        ]
+    }
+}

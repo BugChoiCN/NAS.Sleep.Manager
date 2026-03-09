@@ -1,0 +1,32 @@
+#!/bin/bash
+
+### This script is called after the user installs the application.
+
+echo "设置文件权限..."
+
+# 设置CGI脚本可执行权限
+if [ -f "$TRIM_APPDEST/app/cgi/main.cgi" ]; then
+    chmod +x "$TRIM_APPDEST/app/cgi/main.cgi"
+    echo "✓ main.cgi 权限已设置"
+fi
+
+# 设置主控制脚本可执行权限
+if [ -f "$TRIM_APPDEST/cmd/main" ]; then
+    chmod +x "$TRIM_APPDEST/cmd/main"
+    echo "✓ cmd/main 权限已设置"
+fi
+
+# 设置所有回调脚本可执行权限
+for script in "$TRIM_APPDEST/cmd"/*_init "$TRIM_APPDEST/cmd"/*_callback; do
+    if [ -f "$script" ]; then
+        chmod +x "$script"
+        echo "✓ $(basename "$script") 权限已设置"
+    fi
+done
+
+# 创建必要的目录
+mkdir -p "$TRIM_PKGVAR"
+mkdir -p "$TRIM_PKGETC"
+
+echo "权限设置完成"
+exit 0

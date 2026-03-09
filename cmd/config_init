@@ -1,0 +1,50 @@
+#!/bin/bash
+
+# 配置初始化脚本
+# 在用户打开配置页面之前调用
+
+echo "初始化NAS智能休眠管理配置..."
+
+CONFIG_FILE="$TRIM_PKGETC/nas-suspend.conf"
+
+# 如果配置文件不存在,创建默认配置
+if [ ! -f "$CONFIG_FILE" ]; then
+    mkdir -p "$(dirname "$CONFIG_FILE")"
+    cat > "$CONFIG_FILE" << EOF
+# ============================================
+# NAS自动休眠配置文件
+# 创建时间: $(date '+%Y-%m-%d %H:%M:%S')
+# ============================================
+
+# ---------- 基础设置 ----------
+# 空闲多长时间后休眠（秒）
+INACTIVITY_TIMEOUT=1800      # 30分钟
+
+# 检查间隔（秒）
+CHECK_INTERVAL=60           # 60秒
+
+# 日志文件路径
+LOG_FILE="$TRIM_PKGVAR/nas-suspend.log"
+
+# ---------- 连接检测设置 ----------
+# 允许的最大活跃连接数
+MAX_ALLOWED_CONNECTIONS=5
+
+# ---------- 网络检测设置 ----------
+# 网络流量变化阈值（字节）
+MIN_NETWORK_CHANGE=1048576  # 1MB
+
+# ---------- 调试设置 ----------
+# 启用详细日志
+VERBOSE_LOG=true
+
+# ---------- 网络唤醒设置 ----------
+# 启用网络唤醒
+ENABLE_WAKE_ON_LAN=true
+EOF
+    echo "✅ 默认配置文件已创建: $CONFIG_FILE"
+else
+    echo "ℹ️  配置文件已存在: $CONFIG_FILE"
+fi
+
+exit 0

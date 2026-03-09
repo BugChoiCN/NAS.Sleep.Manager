@@ -1,0 +1,10 @@
+﻿[Desktop Entry]
+Name=NAS智能休眠管理
+Name[en]=NAS Sleep Manager
+Comment=监控NAS活动并在空闲时自动休眠，支持网络唤醒功能
+Comment[en]=Monitor NAS activity and auto-suspend when idle
+Exec=/cgi/ThirdParty/NAS.Sleep.Manager/main.cgi/
+Icon=images/icon-64.png
+Type=Application
+Terminal=false
+Categories=System;Utility;

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NAS智能休眠管理 - 配置</title>
+    <script>
+        // 页面加载后自动跳转到系统配置页面
+        window.onload = function() {
+            // 调用飞牛系统的配置接口
+            var currentUrl = window.location.href;
+            var appId = currentUrl.match(/\/([^\/]+)\/?$/);
+
+            if (appId) {
+                // 尝试通过API调用配置
+                console.log('正在打开配置窗口...');
+
+                // 方法1: 使用postMessage通知父页面
+                if (window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'openConfig',
+                        app: appId[1]
+                    }, '*');
+                }
+
+                // 方法2: 直接跳转到配置URL
+                setTimeout(function() {
+                    // 尝试常见的配置URL格式
+                    var configUrls = [
+                        '/ui/app.html#!/app/' + appId[1] + '/config',
+                        '/ui/#!/app/' + appId[1] + '/config',
+                        '/app.html#!/app/' + appId[1] + '/config'
+                    ];
+
+                    for (var i = 0; i < configUrls.length; i++) {
+                        console.log('尝试跳转:', configUrls[i]);
+                        window.location.href = configUrls[i];
+                        break;
+                    }
+                }, 500);
+            }
+
+            // 显示提示信息
+            document.body.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;">' +
+                '<div style="text-align:center;">' +
+                '<h2>正在打开配置窗口...</h2>' +
+                '<p>如果没有自动跳转，请点击下面的按钮</p>' +
+                '<button onclick="openConfigManually()" style="padding:10px 20px;background:#667eea;color:white;border:none;border-radius:5px;cursor:pointer;">手动打开配置</button>' +
+                '</div></div>';
+        };
+
+        function openConfigManually() {
+            // 获取应用名称
+            var currentUrl = window.location.href;
+            var match = currentUrl.match(/\/([^\/]+)\/?$/);
+            if (match) {
+                var appName = match[1];
+                // 尝试直接调用配置接口
+                fetch('/api/open_config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ app: appName })
+                }).then(function(response) {
+                    console.log('配置打开请求已发送');
+                }).catch(function(error) {
+                    console.error('无法打开配置:', error);
+                    alert('请手动在应用中心右键点击应用，选择"运行设置"');
+                });
+            }
+        }
+    </script>
+</head>
+<body>
+</body>
+</html>

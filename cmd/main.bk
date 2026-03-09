@@ -1,0 +1,486 @@
+#!/bin/bash
+
+# ============================================
+# NAS智能休眠管理 - 主控制脚本
+# 整合了nas-auto-suspend.sh、nas-auto-suspend.service、nas-suspend.conf的功能
+# ============================================
+
+# 定义应用内部的路径
+APP_DIR="$TRIM_APPDEST"
+APP_SERVICE_FILE="$TRIM_PKGVAR/nas-sleep-manager.service"
+APP_SCRIPT_FILE="$TRIM_PKGVAR/nas-sleep-manager.sh"
+APP_CONFIG_FILE="$TRIM_PKGETC/nas-suspend.conf"
+APP_LOG_FILE="$TRIM_PKGVAR/nas-suspend.log"
+
+# 在脚本开头添加权限检查
+check_privileges() {
+    if [ "$TRIM_APP_STATUS" != "running_as_root" ]; then
+        echo "警告: 应用未以root权限运行，某些功能可能受限"
+        echo "将以受限模式运行..."
+        return 1
+    fi
+    return 0
+}
+
+
+# 加载默认配置函数
+load_default_config() {
+    cat > "$APP_CONFIG_FILE" << 'EOF'
+# ============================================
+# NAS自动休眠配置文件
+# ============================================
+
+# ---------- 基础设置 ----------
+# 空闲多长时间后休眠（秒）
+INACTIVITY_TIMEOUT=1800      # 15分钟
+
+# 检查间隔（秒）
+CHECK_INTERVAL=60           # 60秒
+
+# 日志文件路径
+LOG_FILE="/var/log/nas-suspend.log"
+
+# ---------- 连接检测设置 ----------
+# 允许的最大活跃连接数
+# 0 = 不允许任何外部连接
+MAX_ALLOWED_CONNECTIONS=3
+
+# ---------- 网络检测设置 ----------
+# 网络流量变化阈值（字节）
+# 超过此值认为有活动
+MIN_NETWORK_CHANGE=1048576  # 1MB
+
+# ---------- 调试设置 ----------
+# 启用详细日志
+VERBOSE_LOG=true
+EOF
+    chmod 644 "$APP_CONFIG_FILE"
+}
+
+# 安装服务文件
+install_service() {
+    cat > "$APP_SERVICE_FILE" << 'EOF'
+[Unit]
+Description=NAS Sleep Manager Service
+Description=监控NAS活动并在空闲时自动休眠
+After=network.target multi-user.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$USER
+Group=$GROUP
+ExecStart=$TRIM_PKGVAR/nas-sleep-manager.sh
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+WorkingDirectory=$TRIM_PKGVAR
+
+# 资源限制
+MemoryMax=100M
+CPUQuota=10%
+
+# 安全设置
+NoNewPrivileges=true
+PrivateTmp=true
+ReadWritePaths=$TRIM_PKGVAR
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    chmod 644 "$APP_SERVICE_FILE"
+}
+
+# 安装主脚本
+install_main_script() {
+    # 将SERVICE_FILE和SCRIPT_FILE的路径改为应用内路径
+    # 将LOG_FILE路径改为$TRIM_PKGVAR/nas-suspend.log
+    # 将CONFIG_FILE路径改为$TRIM_PKGETC/nas-suspend.conf
+    cat > "$APP_SCRIPT_FILE" << 'EOF'
+#!/bin/bash
+
+# ============================================
+# NAS智能自动休眠脚本
+# 版本: 1.0
+# 功能: 监控NAS活动并在空闲时休眠
+# ============================================
+
+# -------------------------------------------------
+# 配置加载
+# -------------------------------------------------
+CONFIG_FILE="$TRIM_PKGETC/nas-suspend.conf"
+
+# 默认配置
+INACTIVITY_TIMEOUT=300      # 5分钟
+CHECK_INTERVAL=60           # 60秒
+LOG_FILE="$TRIM_PKGVAR/nas-suspend.log"
+MAX_ALLOWED_CONNECTIONS=5   # 允许外部5个连接
+MIN_NETWORK_CHANGE=1048576  # 1MB网络变化阈值
+VERBOSE_LOG=true           # 详细日志
+
+# 加载配置文件
+if [ -f "$CONFIG_FILE" ] && [ -r "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - 已加载配置文件" >&2
+fi
+
+# -------------------------------------------------
+# 日志函数
+# -------------------------------------------------
+log() {
+    local level="$1"
+    local message="$2"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    
+    if [ "$VERBOSE_LOG" = "true" ] || [ "$level" = "INFO" ] || [ "$level" = "ERROR" ]; then
+        echo "[${timestamp}] [${level}] ${message}" | tee -a "$LOG_FILE" >&2
+    else
+        echo "[${timestamp}] [${level}] ${message}" >> "$LOG_FILE"
+    fi
+}
+
+# -------------------------------------------------
+# 检测函数
+# -------------------------------------------------
+
+# 1. 检查活跃连接数
+check_connections() {
+    # 排除本地连接，只计算外部TCP连接
+    local connections=$(ss -tn state established 2>/dev/null | awk '!/127\.0\.0\.1|::1/ && NR>1' | wc -l)
+    echo "$connections"
+}
+
+# 2. 检查网络流量
+check_network_traffic() {
+    # 获取总接收和发送字节数
+    local rx_bytes=0
+    local tx_bytes=0
+    
+    for iface in /sys/class/net/eth* /sys/class/net/en*; do
+        if [ -d "$iface" ]; then
+            iface_name=$(basename "$iface")
+            rx_bytes=$((rx_bytes + $(cat "/sys/class/net/$iface_name/statistics/rx_bytes" 2>/dev/null || echo 0)))
+            tx_bytes=$((tx_bytes + $(cat "/sys/class/net/$iface_name/statistics/tx_bytes" 2>/dev/null || echo 0)))
+        fi
+    done
+    
+    echo "${rx_bytes}:${tx_bytes}"
+}
+
+# 3. 检查磁盘活动
+check_disk_activity() {
+    local total_io=0
+    for disk in /sys/block/sd* /sys/block/nvme*; do
+        if [ -d "$disk" ]; then
+            disk_name=$(basename "$disk")
+            read reads writes < <(awk '{print $4+$8}' "/sys/block/$disk_name/stat" 2>/dev/null | echo "0 0")
+            total_io=$((total_io + reads + writes))
+        fi
+    done
+    echo "$total_io"
+}
+
+# -------------------------------------------------
+# 启用网络唤醒
+# -------------------------------------------------
+enable_wake_on_lan() {
+    log "INFO" "启用网络唤醒(WOL)..."
+    
+    local enabled_count=0
+    for iface in /sys/class/net/eth* /sys/class/net/en*; do
+        if [ -d "$iface" ]; then
+            iface_name=$(basename "$iface")
+            if ethtool -s "$iface_name" wol g 2>/dev/null; then
+                log "INFO" "  ✓ 已启用 $iface_name 的WOL"
+                enabled_count=$((enabled_count + 1))
+            else
+                log "WARNING" "  ✗ 无法启用 $iface_name 的WOL"
+            fi
+        fi
+    done
+    
+    if [ $enabled_count -eq 0 ]; then
+        log "WARNING" "未能启用任何网卡的WOL功能"
+    fi
+}
+
+# -------------------------------------------------
+# 综合空闲检测
+# -------------------------------------------------
+is_system_idle() {
+    local idle=true
+    local reasons=""
+    
+    # 1. 检查连接
+    local connections=$(check_connections)
+    if [ "$connections" -gt "$MAX_ALLOWED_CONNECTIONS" ]; then
+        idle=false
+        reasons="${reasons}连接数(${connections}) "
+    fi
+    
+    # 2. 检查网络流量
+    local current_network=$(check_network_traffic)
+    local current_rx=$(echo "$current_network" | cut -d: -f1)
+    local current_tx=$(echo "$current_network" | cut -d: -f2)
+    
+    if [ -z "${last_network_rx:-}" ]; then
+        last_network_rx=$current_rx
+        last_network_tx=$current_tx
+    fi
+    
+    local rx_diff=$((current_rx - last_network_rx))
+    local tx_diff=$((current_tx - last_network_tx))
+    
+    if [ "${rx_diff#-}" -gt "$MIN_NETWORK_CHANGE" ] || [ "${tx_diff#-}" -gt "$MIN_NETWORK_CHANGE" ]; then
+        idle=false
+        reasons="${reasons}网络活动(RX:${rx_diff}, TX:${tx_diff}) "
+    fi
+    
+    if [ $(date +%M) -eq 0 ]; then
+        last_network_rx=$current_rx
+        last_network_tx=$current_tx
+        log "DEBUG" "每小时重置网络基准统计"
+    fi
+    
+    # 3. 检查磁盘活动
+    local disk_io=$(check_disk_activity)
+    if [ "$disk_io" -gt 1000 ]; then
+        idle=false
+        reasons="${reasons}磁盘活动 "
+    fi
+    
+    if $idle; then
+        echo "idle"
+    else
+        echo "active:${reasons}"
+    fi
+}
+
+# -------------------------------------------------
+# 主函数
+# -------------------------------------------------
+main() {
+    touch "$LOG_FILE" 2>/dev/null || {
+        echo "错误: 无法创建日志文件 $LOG_FILE" >&2
+        exit 1
+    }
+    chmod 644 "$LOG_FILE" 2>/dev/null
+    
+    log "INFO" "========================================"
+    log "INFO" "NAS智能自动休眠脚本启动"
+    log "INFO" "========================================"
+    log "INFO" "配置文件: $CONFIG_FILE"
+    log "INFO" "日志文件: $LOG_FILE"
+    log "INFO" "超时时间: ${INACTIVITY_TIMEOUT}秒"
+    log "INFO" "检查间隔: ${CHECK_INTERVAL}秒"
+    log "INFO" "最大允许连接: ${MAX_ALLOWED_CONNECTIONS}"
+    log "INFO" "网络变化阈值: ${MIN_NETWORK_CHANGE}字节"
+    log "INFO" "========================================"
+    
+    local idle_start_time=$(date +%s)
+    local last_status="unknown"
+    local cycle_count=0
+    
+    log "INFO" "开始监控系统活动..."
+    log "INFO" "初始连接数: $(check_connections)"
+    
+    while true; do
+        sleep "$CHECK_INTERVAL"
+        cycle_count=$((cycle_count + 1))
+        
+        local current_time=$(date +%s)
+        local status_result=$(is_system_idle)
+        local status=$(echo "$status_result" | cut -d: -f1)
+        
+        if [ "$status" = "active" ]; then
+            local reasons=$(echo "$status_result" | cut -d: -f2-)
+            
+            if [ "$last_status" != "active" ]; then
+                log "INFO" "系统状态: 活跃 → ${reasons}"
+            fi
+            
+            idle_start_time=$current_time
+            last_status="active"
+        else
+            local idle_duration=$((current_time - idle_start_time))
+            
+            if [ "$last_status" != "idle" ] || [ $((cycle_count % 5)) -eq 0 ]; then
+                log "INFO" "系统状态: 空闲 (${idle_duration}秒)"
+            fi
+            
+            if [ $idle_duration -ge $INACTIVITY_TIMEOUT ]; then
+                log "INFO" "========================================"
+                log "INFO" "🎯 达到休眠条件"
+                log "INFO" "系统已连续空闲 ${idle_duration}秒"
+                log "INFO" "开始最终确认检查..."
+                log "INFO" "========================================"
+                
+                sleep 30
+                local final_check=$(is_system_idle)
+                
+                if [ "$(echo "$final_check" | cut -d: -f1)" = "idle" ]; then
+                    log "INFO" "✅ 最终确认: 系统仍然空闲"
+                    
+                    enable_wake_on_lan
+                    
+                    log "INFO" "同步磁盘数据..."
+                    sync
+                    sleep 2
+                    
+                    log "INFO" "💤 正在进入休眠状态..."
+                    
+                    if systemctl suspend; then
+                        log "INFO" "✅ 休眠命令执行成功"
+                    else
+                        local exit_code=$?
+                        log "ERROR" "❌ 休眠命令失败，退出码: $exit_code"
+                    fi
+                    
+                    sleep 10
+                    log "INFO" "⏰ 系统唤醒，重新开始监控"
+                    idle_start_time=$(date +%s)
+                    last_status="unknown"
+                    cycle_count=0
+                else
+                    log "INFO" "⚠️  最终检查失败，系统恢复活跃"
+                    idle_start_time=$current_time
+                    last_status="active"
+                fi
+            fi
+            
+            last_status="idle"
+        fi
+        
+        if [ $((cycle_count % 10)) -eq 0 ]; then
+            log "DEBUG" "系统状态汇总 - 周期: ${cycle_count}, 连接数: $(check_connections)"
+        fi
+    done
+}
+
+# -------------------------------------------------
+# 错误处理和信号捕获
+# -------------------------------------------------
+handle_exit() {
+    log "INFO" "脚本被终止"
+    exit 0
+}
+
+trap handle_exit SIGTERM SIGINT
+
+# -------------------------------------------------
+# 脚本入口
+# -------------------------------------------------
+if [ "$EUID" -ne 0 ]; then
+    echo "错误: 此脚本需要root权限运行" >&2
+    exit 1
+fi
+
+main
+EOF
+    chmod 755 "$SCRIPT_FILE"
+}
+
+# 主控制逻辑
+case $1 in
+start)
+    echo "启动NAS智能休眠管理服务..."
+    
+    # 检查配置文件
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "配置文件不存在，创建默认配置..."
+        load_default_config
+    fi
+    
+    # 安装服务文件
+    install_service
+    
+    # 安装主脚本
+    install_main_script
+    
+    # 启用并启动服务
+    systemctl enable nas-sleep-manager.service
+    systemctl start nas-sleep-manager.service
+    
+    if systemctl is-active --quiet nas-sleep-manager.service; then
+        echo "✅ 服务启动成功"
+        exit 0
+    else
+        echo "❌ 服务启动失败"
+        exit 1
+    fi
+    ;;
+    
+stop)
+    echo "停止NAS智能休眠管理服务..."
+    
+    if systemctl is-active --quiet nas-sleep-manager.service; then
+        systemctl stop nas-sleep-manager.service
+        systemctl disable nas-sleep-manager.service
+        echo "✅ 服务已停止"
+    else
+        echo "⚠️  服务未运行"
+    fi
+    exit 0
+    ;;
+    
+status)
+    if systemctl is-active --quiet nas-sleep-manager.service; then
+        echo "✅ NAS智能休眠管理服务正在运行"
+        exit 0
+    else
+        echo "❌ NAS智能休眠管理服务未运行"
+        exit 3
+    fi
+    ;;
+    
+config)
+    echo "应用配置: $TRIM_APP_STATUS"
+    echo "应用目录: $TRIM_APPDEST"
+    echo "配置目录: $TRIM_PKGETC"
+    echo "数据目录: $TRIM_PKGVAR"
+    
+    # 处理用户配置
+    if [ -n "$wizard_enabled" ]; then
+        if [ "$wizard_enabled" = "false" ]; then
+            echo "用户已禁用休眠功能，停止服务..."
+            systemctl stop nas-sleep-manager.service
+        else
+            echo "用户已启用休眠功能，更新配置..."
+            update_configuration
+        fi
+    fi
+    exit 0
+    ;;
+    
+*)
+    echo "未知命令: $1"
+    exit 1
+    ;;
+esac
+
+# 在cmd/main中添加用户级服务启动
+start_user_service() {
+    echo "启动用户级NAS休眠管理服务..."
+    
+    # 确保目录存在
+    mkdir -p ~/.config/systemd/user
+    
+    # 复制服务文件到用户目录
+    cp "$APP_SERVICE_FILE" ~/.config/systemd/user/
+    
+    # 启用并启动服务
+    systemctl --user daemon-reload
+    systemctl --user enable nas-sleep-manager.service
+    systemctl --user start nas-sleep-manager.service
+    
+    if systemctl --user is-active --quiet nas-sleep-manager.service; then
+        echo "✅ 用户级服务启动成功"
+        exit 0
+    else
+        echo "❌ 用户级服务启动失败"
+        systemctl --user status nas-sleep-manager.service
+        exit 1
+    fi
+}

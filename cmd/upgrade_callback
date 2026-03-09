@@ -1,0 +1,22 @@
+#!/bin/bash
+
+### This script is called after the user upgrades the application.
+
+echo "升级NAS智能休眠管理应用..."
+
+# 停止旧服务（如果正在运行）
+if [ -f "$TRIM_PKGVAR/nas-sleep-manager.pid" ]; then
+    old_pid=$(cat "$TRIM_PKGVAR/nas-sleep-manager.pid" 2>/dev/null)
+    if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
+        echo "停止旧服务进程: $old_pid"
+        kill "$old_pid" 2>/dev/null
+    fi
+    rm -f "$TRIM_PKGVAR/nas-sleep-manager.pid"
+fi
+
+# 重启服务
+echo "重启服务..."
+"$TRIM_APPDEST/cmd/main" restart
+
+echo "升级完成"
+exit 0

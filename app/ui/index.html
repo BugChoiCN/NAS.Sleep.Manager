@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NAS智能休眠管理</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .status-card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .status-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        
+        .status-label {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .status-value {
+            font-weight: 500;
+        }
+        
+        .status-running { color: #28a745; }
+        .status-stopped { color: #dc3545; }
+        
+        .settings-section {
+            margin-bottom: 30px;
+        }
+        
+        .settings-section h3 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #495057;
+            border-bottom: 2px solid #f1f3f5;
+            padding-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .form-hint {
+            font-size: 12px;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        
+        .switch-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+            margin-right: 10px;
+        }
+        
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .slider {
+            background-color: #28a745;
+        }
+        
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        .config-hint {
+            background: #e7f3ff;
+            border: 1px solid #b3d7ff;
+            color: #004085;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex: 1;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5a6fd8;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .logs-section {
+            margin-top: 30px;
+        }
+        
+        .log-content {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 12px;
+            height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        
+        .permission-warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .health-status {
+            background: #e7f3ff;
+            border: 1px solid #b3d7ff;
+            color: #004085;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .health-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .health-running { background: #28a745; }
+        .health-idle { background: #ffc107; }
+        .health-stopped { background: #dc3545; }
+        .health-unknown { background: #6c757d; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔄 NAS智能休眠管理</h1>
+            <p>监控系统活动并在空闲时自动休眠，支持网络唤醒功能</p>
+        </div>
+        
+        <div class="content">
+            <div class="alert" id="alertMessage"></div>
+            
+            <div class="status-card">
+                <h3>系统状态</h3>
+                <div class="status-item">
+                    <span class="status-label">服务状态</span>
+                    <span class="status-value" id="serviceStatus">检测中...</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">最后检测时间</span>
+                    <span class="status-value" id="lastCheckTime">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">活跃连接数</span>
+                    <span class="status-value" id="activeConnections">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">当前状态</span>
+                    <span class="status-value" id="systemStatus">-</span>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <h3>🔧 基本设置</h3>
+                
+                <div class="form-group">
+                    <div class="switch-group">
+                        <label class="switch">
+                            <input type="checkbox" id="enableService" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <label for="enableService" style="cursor: pointer;">启用自动休眠功能</label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="inactivityTimeout">空闲休眠时间（分钟）</label>
+                    <input type="number" id="inactivityTimeout" class="form-control" min="5" max="240" value="30">
+                    <div class="form-hint">系统连续空闲多长时间后进入休眠（5-240分钟）</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="checkInterval">检查间隔（秒）</label>
+                    <input type="number" id="checkInterval" class="form-control" min="10" max="300" value="60">
+                    <div class="form-hint">检查系统活动的频率（10-300秒）</div>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <h3>🌐 连接设置</h3>
+                
+                <div class="form-group">
+                    <label for="maxConnections">最大允许连接数</label>
+                    <input type="number" id="maxConnections" class="form-control" min="0" max="50" value="5">
+                    <div class="form-hint">允许的最大外部TCP连接数，超过此值视为活跃（0表示不允许任何连接）</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="networkThreshold">网络活动阈值（MB）</label>
+                    <input type="number" id="networkThreshold" class="form-control" min="0.1" max="100" step="0.1" value="1">
+                    <div class="form-hint">网络流量变化超过此值视为有活动（0.1-100 MB）</div>
+                </div>
+                
+                <div class="form-group">
+                    <div class="switch-group">
+                        <label class="switch">
+                            <input type="checkbox" id="enableWakeOnLAN" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <label for="enableWakeOnLAN" style="cursor: pointer;">启用网络唤醒（WOL）</label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <h3>📊 日志设置</h3>
+                
+                <div class="form-group">
+                    <div class="switch-group">
+                        <label class="switch">
+                            <input type="checkbox" id="verboseLogging" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <label for="verboseLogging" style="cursor: pointer;">启用详细日志记录</label>
+                    </div>
+                </div>
+                
+                <div class="logs-section">
+                    <label>最近日志</label>
+                    <div class="log-content" id="logContent">
+                        正在加载日志...
+                    </div>
+                </div>
+            </div>
+            
+            <div class="permission-warning" id="permissionWarning" style="display: none;">
+                <strong>⚠️ 权限提示：</strong> 当前应用以普通用户权限运行。某些功能（如休眠、网络唤醒）可能需要root权限。如果遇到权限问题，请检查系统设置。
+            </div>
+            
+            <div class="config-hint">
+                <strong>💡 提示：</strong> 点击打开后会直接进入配置向导。如需在此页面修改设置，请使用下方按钮。
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="saveSettings()">💾 保存设置</button>
+                <button class="btn btn-secondary" onclick="loadSettings()">🔄 重新加载</button>
+                <button class="btn btn-danger" onclick="restartService()">🔄 重启服务</button>
+                <button class="btn btn-secondary" onclick="openWizardConfig()">⚙️ 打开配置向导</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 全局变量
+        let currentSettings = {};
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStatus();
+            loadSettings();
+            loadLogs();
+
+            // 每30秒刷新一次状态
+            setInterval(loadStatus, 30000);
+            setInterval(loadLogs, 60000);
+            setInterval(runHealthCheck, 60000);
+
+            // 检查权限
+            checkPermissions();
+
+            // 运行健康检查
+            runHealthCheck();
+        });
+        
+        // 检查权限
+        async function checkPermissions() {
+            try {
+                const response = await fetch('/api/permission-check');
+                const data = await response.json();
+                
+                if (data.permissionLevel === 'limited') {
+                    document.getElementById('permissionWarning').style.display = 'block';
+                }
+            } catch (error) {
+                console.log('权限检查失败:', error);
+            }
+        }
+        
+        // 加载服务状态
+        async function loadStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+
+                const statusElement = document.getElementById('serviceStatus');
+                if (data.running) {
+                    statusElement.textContent = '✅ 运行中';
+                    statusElement.className = 'status-value status-running';
+                } else {
+                    statusElement.textContent = '❌ 已停止';
+                    statusElement.className = 'status-value status-stopped';
+                }
+                
+                document.getElementById('lastCheckTime').textContent = data.lastCheck || '-';
+                document.getElementById('activeConnections').textContent = data.connections || '0';
+                document.getElementById('systemStatus').textContent = data.systemStatus || '未知';
+            } catch (error) {
+                console.error('加载状态失败:', error);
+                document.getElementById('serviceStatus').textContent = '❌ 连接失败';
+            }
+        }
+        
+        // 加载设置
+        async function loadSettings() {
+            try {
+                const response = await fetch('/api/settings');
+                const data = await response.json();
+                currentSettings = data;
+
+                // 更新表单
+                document.getElementById('enableService').checked = data.enabled !== false;
+                document.getElementById('inactivityTimeout').value = Math.floor((data.inactivityTimeout || 1800) / 60);
+                document.getElementById('checkInterval').value = data.checkInterval || 60;
+                document.getElementById('maxConnections').value = data.maxConnections || 5;
+                document.getElementById('networkThreshold').value = Math.round((data.networkThreshold || 1048576) / 1048576 * 10) / 10;
+                document.getElementById('enableWakeOnLAN').checked = data.wakeOnLAN !== false;
+                document.getElementById('verboseLogging').checked = data.verboseLogging !== false;
+
+                showAlert('设置加载成功', 'success');
+            } catch (error) {
+                console.error('加载设置失败:', error);
+                showAlert('加载设置失败: ' + error.message, 'error');
+            }
+        }
+        
+        // 保存设置
+        async function saveSettings() {
+            try {
+                const settings = {
+                    enabled: document.getElementById('enableService').checked,
+                    inactivityTimeout: parseInt(document.getElementById('inactivityTimeout').value) * 60,
+                    checkInterval: parseInt(document.getElementById('checkInterval').value),
+                    maxConnections: parseInt(document.getElementById('maxConnections').value),
+                    networkThreshold: parseFloat(document.getElementById('networkThreshold').value) * 1048576,
+                    wakeOnLAN: document.getElementById('enableWakeOnLAN').checked,
+                    verboseLogging: document.getElementById('verboseLogging').checked
+                };
+                const response = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(settings)
+                });
+                
+                if (response.ok) {
+                    showAlert('设置保存成功，服务将自动重启应用新配置', 'success');
+                    setTimeout(restartService, 1000);
+                } else {
+                    throw new Error('保存失败: ' + response.statusText);
+                }
+            } catch (error) {
+                console.error('保存设置失败:', error);
+                showAlert('保存设置失败: ' + error.message, 'error');
+            }
+        }
+        
+        // 重启服务
+        async function restartService() {
+            try {
+                const response = await fetch('/api/restart', { method: 'POST' });
+                if (response.ok) {
+                    showAlert('服务重启中...', 'success');
+                    setTimeout(loadStatus, 3000);
+                } else {
+                    throw new Error('重启失败');
+                }
+            } catch (error) {
+                console.error('重启服务失败:', error);
+                showAlert('重启服务失败: ' + error.message, 'error');
+            }
+        }
+        
+        // 加载日志
+        async function loadLogs() {
+            try {
+                const response = await fetch('/api/logs');
+                const logs = await response.text();
+                document.getElementById('logContent').textContent = logs || '暂无日志';
+            } catch (error) {
+                console.error('加载日志失败:', error);
+                document.getElementById('logContent').textContent = '加载日志失败';
+            }
+        }
+        
+        // 显示提示消息
+        function showAlert(message, type) {
+            const alert = document.getElementById('alertMessage');
+            alert.textContent = message;
+            alert.className = `alert alert-${type}`;
+            alert.style.display = 'block';
+
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 5000);
+        }
+
+        // 运行健康检查
+        async function runHealthCheck() {
+            try {
+                const response = await fetch('/api/health-check');
+                const data = await response.json();
+
+                // 更新健康状态
+                const healthStatus = document.getElementById('healthStatus');
+                const healthIndicator = document.getElementById('healthIndicator');
+                const healthStatusText = document.getElementById('healthStatusText');
+
+                healthStatus.style.display = 'block';
+                healthIndicator.className = 'health-indicator';
+
+                // 根据状态设置样式和文本
+                switch(data.status) {
+                    case 'running':
+                        healthIndicator.classList.add('health-running');
+                        healthStatusText.textContent = '运行中';
+                        healthStatusText.style.color = '#28a745';
+                        break;
+                    case 'idle':
+                        healthIndicator.classList.add('health-idle');
+                        healthStatusText.textContent = '空闲';
+                        healthStatusText.style.color = '#ffc107';
+                        break;
+                    case 'stopped':
+                        healthIndicator.classList.add('health-stopped');
+                        healthStatusText.textContent = '已停止';
+                        healthStatusText.style.color = '#dc3545';
+                        break;
+                    default:
+                        healthIndicator.classList.add('health-unknown');
+                        healthStatusText.textContent = '未知';
+                        healthStatusText.style.color = '#6c757d';
+                }
+
+                // 更新其他信息
+                document.getElementById('healthUptime').textContent = data.uptime || '-';
+                document.getElementById('healthLastCheck').textContent = data.lastCheckTime || '-';
+                document.getElementById('healthConfigFile').textContent = data.configFile === 'exists' ? '✅ 存在' : '❌ 不存在';
+                document.getElementById('healthLogFile').textContent = data.logFile === 'exists' ? '✅ 存在' : '❌ 不存在';
+
+            } catch (error) {
+                console.error('健康检查失败:', error);
+                document.getElementById('healthStatus').style.display = 'block';
+                document.getElementById('healthIndicator').className = 'health-indicator health-unknown';
+                document.getElementById('healthStatusText').textContent = '检测失败';
+            }
+        }
+
+        // 测试休眠功能
+        async function testSuspend() {
+            try {
+                const response = await fetch('/api/test-suspend', { method: 'POST' });
+                const data = await response.json();
+                showAlert(data.message || '休眠测试完成', data.success ? 'success' : 'error');
+            } catch (error) {
+                console.error('测试休眠失败:', error);
+                showAlert('测试休眠失败: ' + error.message, 'error');
+            }
+        }
+
+        // 打开配置向导
+        function openWizardConfig() {
+            // 尝试调用飞牛系统的配置接口
+            try {
+                // 方法1: 尝试通过postMessage通知父页面
+                if (window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'openConfig',
+                        app: 'NAS.Sleep.Manager'
+                    }, '*');
+                    showAlert('配置窗口已请求打开', 'success');
+                } else {
+                    // 方法2: 尝试直接跳转
+                    window.location.href = '/ui/app.html#!/app/NAS.Sleep.Manager/config';
+                }
+            } catch (error) {
+                console.error('打开配置失败:', error);
+                showAlert('请手动在应用中心右键应用，选择"运行设置"', 'error');
+            }
+        }
+    </script>
+</body>
+</html>

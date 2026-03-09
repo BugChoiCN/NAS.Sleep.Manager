@@ -1,0 +1,12 @@
+﻿{
+    ".url": {
+        "NAS.Sleep.Manager.Application": {
+            "title": "NAS休眠管理",
+            "icon": "images/icon-{0}.png",
+            "type": "iframe",
+            "protocol": "http",
+            "url": "/cgi/ThirdParty/NAS.Sleep.Manager/main.cgi/",
+            "allUsers": false
+        }
+    }
+}

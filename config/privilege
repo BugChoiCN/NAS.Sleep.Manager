@@ -1,0 +1,17 @@
+{
+    "defaults": {
+        "run-as": "package"
+    },
+    "username": "nas_sleep_manager",
+    "groupname": "nas_sleep_manager",
+    "privileges": [
+        {
+            "name": "network",
+            "description": "允许监控网络连接状态"
+        },
+        {
+            "name": "logging",
+            "description": "允许写入日志文件"
+        }
+    ]
+}
